@@ -8,203 +8,123 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_absolute_error
 
-# 1. CONFIGURACIÓN DE LA PÁGINA (Estilo Corporativo)
-st.set_page_config(
-    page_title="Control Tower Premium | Parkano Bolivia",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Estilo personalizado mediante CSS interno para mejorar la visualización corporativa
-st.markdown("""
-    <style>
-    .main { background-color: #f8f9fa; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; box-shadow: 2px 2px 5px rgba(0,0,0,0.05); }
-    h1, h2, h3 { color: #1e293b; font-family: 'Segoe UI', sans-serif; }
-    </style>
-""", unsafe_allow_html=True)
+# 1. CONFIGURACIÓN DE LA PÁGINA
+st.set_page_config(page_title="Control Tower Premium | Parkano Bolivia", page_icon="📈", layout="wide")
 
 st.title("🛡️ Control Tower Premium — Parkano Bolivia")
 st.markdown("---")
 
-# 2. CONEXIÓN DE DATOS EN TIEMPO REAL (Auto-actualizable cada 5 minutos)
+# 2. ENLACE DE DATOS
 DATA_URL = "https://docs.google.com/spreadsheets/d/1jh_7rzOG1pisxwIIiT1CCfY3F0fdXmNA9vaaZFJUfns/export?format=csv&gid=158096369"
 
-@st.cache_data(ttl=300) # El dashboard se refresca solo internamente cada 300 segundos
+# =====================================================================
+# 🛠️ REEMPLAZA LOS NOMBRES DE ABAJO POR LOS NOMBRES EXACTOS DE TU EXCEL:
+COLUMNA_NUMERICA_PRINCIPAL = "Ventas"   # Pon aquí el nombre de tu columna con números (ej: "Monto", "Cantidad")
+COLUMNA_TEXTO_PRINCIPAL = "Categoría"   # Pon aquí el nombre de tu columna de texto (ej: "Detalle", "Producto")
+# =====================================================================
+
+@st.cache_data(ttl=300)
 def load_data():
     df = pd.read_csv(DATA_URL)
-    # Limpieza automática de columnas vacías
     df = df.dropna(how='all', axis=1)
+    
+    # Forzar la conversión de números limpiando caracteres extraños
+    for col in df.columns:
+        # Si la columna parece tener números, la limpiamos para Python
+        if df[col].dtype == object:
+            # Quitamos espacios, signos de dólar y corregimos comas por puntos
+            test_clean = df[col].astype(str).str.replace(r'[\$,\s]', '', regex=True)
+            if test_clean.str.isnumeric().any():
+                df[col] = pd.to_numeric(test_clean, errors='coerce')
+                
     return df
 
 try:
     df_raw = load_data()
     df = df_raw.copy()
 
-    # 3. BARRA LATERAL CONTROLES Y FILTROS DINÁMICOS
-    st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1041/1041910.png", width=80)
-    st.sidebar.title("Panel de Control")
-    
+    # Controles laterales
     if st.sidebar.button("🔄 Forzar Actualización Inmediata"):
         st.cache_data.clear()
         st.rerun()
 
-    # Separación automática de tipos de datos
+    # Detectar columnas automáticamente tras la limpieza
     num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     cat_cols = df.select_dtypes(include=[object]).columns.tolist()
     
+    # Filtro Dinámico por Fecha o Categoría
     st.sidebar.markdown("### 🔍 Filtros Globales")
-    # Generar un filtro dinámico si existen columnas categóricas
-    if cat_cols:
-        filtro_col = st.sidebar.selectbox("Filtrar por columna:", cat_cols)
-        opciones = df[filtro_col].unique().tolist()
-        seleccion = st.sidebar.multiselect(f"Selecciona valores de {filtro_col}:", opciones, default=opciones)
-        df = df[df[filtro_col].isin(seleccion)]
+    filtro_col = st.sidebar.selectbox("Filtrar por columna:", df.columns.tolist())
+    opciones = df[filtro_col].dropna().unique().tolist()
+    seleccion = st.sidebar.multiselect(f"Selecciona valores:", opciones, default=opciones)
+    df = df[df[filtro_col].isin(seleccion)]
 
-    # 4. DISEÑO DE TABS (PESTAÑAS PROFESIONALES)
+    # Pestañas
     tab1, tab2, tab3 = st.tabs(["📊 Análisis Descriptivo", "🔮 Inteligencia Predictiva", "📋 Base de Datos Activa"])
 
-    # ==========================================
-    # PESTAÑA 1: ANÁLISIS DESCRIPTIVO
-    # ==========================================
+    # PESTAÑA 1: DESCRIPTIVO
     with tab1:
         st.header("📈 Resumen Estadístico y KPIs")
         
-        # Métricas Dinámicas principales
         if num_cols:
             cols_kpi = st.columns(min(len(num_cols), 4))
             for i, col in enumerate(num_cols[:4]):
                 with cols_kpi[i]:
-                    total = df[col].sum()
-                    promedio = df[col].mean()
-                    st.metric(label=f"Total {col}", value=f"{total:,.2f}", delta=f"Promedio: {promedio:,.1f}")
+                    st.metric(label=f"Total {col}", value=f"{df[col].sum():,.2f}", delta=f"Promedio: {df[col].mean():,.1f}")
         else:
-            st.warning("No se encontraron columnas numéricas para calcular KPIs.")
+            # Si Python no detectó automáticamente, usamos la columna que configuraste manualmente arriba
+            try:
+                df[COLUMNA_NUMERICA_PRINCIPAL] = pd.to_numeric(df[COLUMNA_NUMERICA_PRINCIPAL].astype(str).str.replace(r'[\$,\s]', '', regex=True), errors='coerce')
+                cols_kpi = st.columns(2)
+                cols_kpi[0].metric(label=f"Total {COLUMNA_NUMERICA_PRINCIPAL}", value=f"{df[COLUMNA_NUMERICA_PRINCIPAL].sum():,.2f}")
+                cols_kpi[1].metric(label=f"Promedio {COLUMNA_NUMERICA_PRINCIPAL}", value=f"{df[COLUMNA_NUMERICA_PRINCIPAL].mean():,.2f}")
+                num_cols.append(COLUMNA_NUMERICA_PRINCIPAL)
+            except:
+                st.warning("⚠️ No se detectaron números automáticamente. Asegúrate de escribir los nombres exactos de tus columnas en las líneas 18 y 19 del código en GitHub.")
 
-        st.markdown("### 📊 Visualización de Tendencias y Distribuciones")
-        col_chart1, col_chart2 = st.columns(2)
+        st.markdown("### 📊 Visualización de Tendencias")
+        c1, c2 = st.columns(2)
+        
+        with c1:
+            x_axis = COLUMNA_TEXTO_PRINCIPAL if COLUMNA_TEXTO_PRINCIPAL in df.columns else df.columns[0]
+            y_axis = COLUMNA_NUMERICA_PRINCIPAL if COLUMNA_NUMERICA_PRINCIPAL in df.columns else num_cols[0] if num_cols else df.columns[0]
+            
+            fig_bar = px.bar(df, x=x_axis, y=y_axis, title=f"Distribución de {y_axis} por {x_axis}", color=y_axis, template="plotly_white")
+            st.plotly_chart(fig_bar, use_container_width=True)
+            
+        with c2:
+            fig_line = px.line(df, x=df.columns[0], y=y_axis, title="Evolución Temporal / Histórica", template="plotly_white")
+            st.plotly_chart(fig_line, use_container_width=True)
 
-        with col_chart1:
-            if len(num_cols) >= 1 and len(cat_cols) >= 1:
-                eje_x = st.selectbox("Eje X (Categoría):", cat_cols, key="x_desc")
-                eje_y = st.selectbox("Eje Y (Valor Numérico):", num_cols, key="y_desc")
-                
-                df_grouped = df.groupby(eje_x)[eje_y].sum().reset_index()
-                fig_bar = px.bar(df_grouped, x=eje_x, y=eje_y, title=f"{eje_y} por {eje_x}",
-                                 color=eje_y, color_continuous_scale="Viridis", template="plotly_white")
-                st.plotly_chart(fig_bar, use_container_width=True)
-            else:
-                st.info("Se requieren columnas numéricas y de texto para gráficos de barra.")
-
-        with col_chart2:
-            if len(num_cols) >= 2:
-                scat_x = st.selectbox("Correlación Eje X:", num_cols, index=0)
-                scat_y = st.selectbox("Correlación Eje Y:", num_cols, index=min(1, len(num_cols)-1))
-                
-                fig_scat = px.scatter(df, x=scat_x, y=scat_y, trendline="ols",
-                                      title=f"Relación y Tendencia: {scat_x} vs {scat_y}", template="plotly_white")
-                st.plotly_chart(fig_scat, use_container_width=True)
-            else:
-                st.info("Se necesitan al menos 2 columnas numéricas para ver correlaciones.")
-
-    # ==========================================
-    # PESTAÑA 2: INTELIGENCIA PREDICTIVA (Machine Learning)
-    # ==========================================
+    # PESTAÑA 2: PREDICTIVO
     with tab2:
         st.header("🔮 Módulo de Predicción Avanzada")
-        st.markdown("Este módulo entrena un modelo de Inteligencia Artificial en tiempo real con los datos de tu Excel para predecir tendencias futuras.")
-
-        if len(num_cols) >= 2:
-            col_p1, col_p2 = st.columns([1, 2])
+        if len(num_cols) >= 1:
+            st.info("🎯 Entrenando modelo de tendencia lineal automático...")
+            df_ml = df.dropna().copy()
+            df_ml['Index_Temporal'] = range(len(df_ml))
             
-            with col_p1:
-                st.markdown("### 🛠️ Configurar Modelo")
-                variable_objetivo = st.selectbox("¿Qué deseas predecir? (Target):", num_cols)
-                
-                variables_predictoras = [c for c in num_cols if c != variable_objetivo]
-                features_seleccionadas = st.multiselect("Variables influyentes (Predictoras):", variables_predictoras, default=variables_predictoras)
-                
-                algoritmo = st.radio("Algoritmo de IA:", ["Random Forest (Complejo/Preciso)", "Regresión Lineal (Tendencia Simple)"])
-
-            with col_p2:
-                if features_seleccionadas:
-                    # Preparación de datos para el modelo eliminando filas vacías
-                    df_ml = df[[variable_objetivo] + features_seleccionadas].dropna()
-                    
-                    if len(df_ml) > 5:
-                        X = df_ml[features_seleccionadas]
-                        y = df_ml[variable_objetivo]
-                        
-                        # División Entrenamiento / Prueba
-                        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-                        
-                        # Selección de Modelo
-                        if algoritmo == "Regresión Lineal (Tendencia Simple)":
-                            model = LinearRegression()
-                        else:
-                            model = RandomForestRegressor(n_estimators=100, random_state=42)
-                            
-                        model.fit(X_train, y_train)
-                        predicciones = model.predict(X_test)
-                        
-                        # Métricas de precisión
-                        r2 = r2_score(y_test, predicciones)
-                        mae = mean_absolute_error(y_test, predicciones)
-                        
-                        st.markdown(f"### 📊 Rendimiento del Modelo")
-                        c_m1, c_m2 = st.columns(2)
-                        c_m1.metric("Precisión del Modelo (R²)", f"{max(0, r2)*100:.1f}%")
-                        c_m2.metric("Margen de Error Promedio (MAE)", f"{mae:,.2f}")
-                        
-                        # Gráfico comparativo Real vs Predicción
-                        fig_pred = go.Figure()
-                        fig_pred.add_trace(go.Scatter(y=y_test.values, mode='markers', name='Valores Reales', marker=dict(color='blue')))
-                        fig_pred.add_trace(go.Scatter(y=predicciones, mode='lines+markers', name='Predicción de IA', marker=dict(color='red')))
-                        fig_pred.update_layout(title="Simulación: Valores Reales vs Predicciones del Modelo", template="plotly_white")
-                        st.plotly_chart(fig_pred, use_container_width=True)
-                        
-                        # Simulador interactivo de entrada de datos
-                        st.markdown("### 🎛️ Simulador de Predicciones en Vivo")
-                        st.write("Cambia los valores abajo para calcular una predicción en tiempo real basada en el histórico:")
-                        inputs_usuario = {}
-                        cols_input = st.columns(len(features_seleccionadas))
-                        
-                        for idx, feat in enumerate(features_seleccionadas):
-                            with cols_input[idx]:
-                                val_min = float(X[feat].min())
-                                val_max = float(X[feat].max())
-                                val_mean = float(X[feat].mean())
-                                inputs_usuario[feat] = st.slider(f"{feat}", val_min, val_max, val_mean)
-                        
-                        df_usuario = pd.DataFrame([inputs_usuario])
-                        pred_resultado = model.predict(df_usuario)[0]
-                        st.success(f"🔮 **Resultado Estimado de {variable_objetivo}: {pred_resultado:,.2f}**")
-                        
-                    else:
-                        st.error("No hay suficientes filas de datos válidas (mínimo 6) para entrenar la Inteligencia Artificial.")
-                else:
-                    st.warning("Selecciona al menos una variable predictora para iniciar el análisis.")
+            X = df_ml[['Index_Temporal']]
+            y = df_ml[num_cols[0]]
+            
+            model = LinearRegression()
+            model.fit(X, y)
+            
+            # Predicción futuros 5 puntos
+            futuro_index = np.array([[len(df_ml) + i] for i in range(5)])
+            predicciones_futuras = model.predict(futuro_index)
+            
+            fig_pred = go.Figure()
+            fig_pred.add_trace(go.Scatter(y=y.values, mode='lines+markers', name='Histórico Real'))
+            fig_pred.add_trace(go.Scatter(x=list(range(len(df_ml), len(df_ml)+5)), y=predicciones_futuras, mode='lines+markers', name='Proyección Predictiva IA', line=dict(dash='dash', color='red')))
+            fig_pred.update_layout(title=f"Predicción Automática de Tendencia para: {num_cols[0]}", template="plotly_white")
+            st.plotly_chart(fig_pred, use_container_width=True)
         else:
-            st.warning("Se necesitan al menos 2 columnas numéricas en tu Excel para habilitar el algoritmo de predicción.")
+            st.warning("Se necesita definir la columna numérica correctamente en el código para activar la IA.")
 
-    # ==========================================
-    # PESTAÑA 3: BASE DE DATOS COMPLETA
-    # ==========================================
+    # PESTAÑA 3: DATA
     with tab3:
-        st.header("📋 Registros de la Base de Datos")
-        st.markdown("Visualización completa de los datos limpios extraídos directamente desde Google Sheets.")
         st.dataframe(df, use_container_width=True)
-        
-        # Botón de descarga de datos filtrados
-        csv_download = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Descargar datos filtrados en CSV",
-            data=csv_download,
-            file_name="control_tower_data.csv",
-            mime="text/csv"
-        )
 
 except Exception as e:
-    st.error(f"🛑 Error crítico en el Control Tower: {e}")
-    st.info("Asegúrate de que las columnas de tu Excel no tengan caracteres extraños en la primera fila y que contenga datos numéricos.")
+    st.error(f"🛑 Error de mapeo: {e}")
