@@ -88,51 +88,88 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# URL de Google Sheets
-DATA_URL = "https://docs.google.com/spreadsheets/d/1jh_7rzOG1pisxwIIiT1CCfY3F0fdXmNA9vaaZFJUfns/export?format=csv"
+# SHEET ID
+SHEET_ID = "1jh_7rzOG1pisxwIIiT1CCfY3F0fdXmNA9vaaZFJUfns"
+
+# URLs separadas para cada hoja
+URL_OPERACIONES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=158096369"
+URL_TESORERIA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+
+def limpiar_numero(valor):
+    """Limpia formatos de números bolivianos"""
+    if pd.isna(valor):
+        return 0
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    # Remover Bs, comas, espacios
+    valor_str = str(valor).replace('Bs', '').replace(',', '').replace(' ', '').strip()
+    try:
+        return float(valor_str)
+    except:
+        return 0
 
 @st.cache_data(ttl=300)
-def load_data():
-    """Carga datos desde Google Sheets con manejo robusto de errores"""
+def load_operaciones():
+    """Carga datos de la hoja Operaciones"""
     try:
-        df = pd.read_csv(DATA_URL)
-        
-        # Detectar si hay columnas de tesorería (empiezan con "Bs")
-        # Por ahora solo trabajamos con columnas de operaciones
+        df = pd.read_csv(URL_OPERACIONES)
         
         # Parsear fechas
-        df['Fecha'] = pd.to_datetime(df.iloc[:, 0], format='%d/%m/%Y', errors='coerce')
-        
-        # Renombrar columnas para facilitar acceso
-        df.columns = [
-            'Fecha', 'Ingreso_Broza_TMH', 'Inventario_Total_Broza_TMH',
-            'Ley_Zn', 'Ley_AG', 'Ley_PB', 'Inventario_CC_Zn',
-            'Inventario_CC_Pb', 'TMH_Procesadas_dia', 'Ley_Feed_ZN',
-            'Ley_Feed_AG', 'Ley_Feed_PB', 'Ley_Analisis_ZN',
-            'Ley_Analisis_AG', 'Ley_Analisis_PB', 'Desviacion_Zn',
-            'Desviacion_AG', 'Desviacion_Pb'
-        ][:len(df.columns)]
+        df['Fecha'] = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce')
         
         # Limpiar columnas numéricas
-        for col in df.columns[1:]:
-            if df[col].dtype == 'object':
-                df[col] = df[col].astype(str).str.replace(',', '').str.replace('Bs', '').str.replace('%', '').str.strip()
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+        columnas_numericas = [
+            'Ingreso_Broza_TMH', 'Inventario_Total_Broza_TMH',
+            'Ley_Zn', 'Ley_AG', 'Ley_PB',
+            'Inventario_CC_Zn', 'Inventario_CC_Pb', 'TMH_Procesadas_dia'
+        ]
+        
+        for col in columnas_numericas:
+            if col in df.columns:
+                df[col] = df[col].apply(limpiar_numero)
         
         # Eliminar filas con fechas inválidas
         df = df.dropna(subset=['Fecha'])
         
         return df
     except Exception as e:
-        st.error(f"❌ Error al cargar datos: {str(e)}")
+        st.error(f"❌ Error al cargar Operaciones: {str(e)}")
+        return pd.DataFrame()
+
+@st.cache_data(ttl=300)
+def load_tesoreria():
+    """Carga datos de la hoja Tesorería"""
+    try:
+        df = pd.read_csv(URL_TESORERIA)
+        
+        # Parsear fechas
+        df['Fecha'] = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce')
+        
+        # Limpiar columnas numéricas
+        columnas_numericas = [
+            'Efectivo_en_Bancos', 'Caja_Central_Mineral',
+            'CxC_Vigente', 'CxC_Vencidos', 'CxP_Mineral'
+        ]
+        
+        for col in columnas_numericas:
+            if col in df.columns:
+                df[col] = df[col].apply(limpiar_numero)
+        
+        # Eliminar filas con fechas inválidas
+        df = df.dropna(subset=['Fecha'])
+        
+        return df
+    except Exception as e:
+        st.error(f"❌ Error al cargar Tesorería: {str(e)}")
         return pd.DataFrame()
 
 # Cargar datos
 with st.spinner("🔄 Cargando datos desde Google Sheets..."):
-    df = load_data()
+    df_ops = load_operaciones()
+    df_teso = load_tesoreria()
 
-if df.empty:
-    st.error("⚠️ No se pudieron cargar los datos. Verifica la URL del Google Sheet.")
+if df_ops.empty:
+    st.error("⚠️ No se pudieron cargar los datos de Operaciones.")
     st.stop()
 
 # ============================================
@@ -142,7 +179,7 @@ col1, col2, col3 = st.columns([3, 1, 1])
 with col1:
     st.markdown("# ⛏️ MINERA PARKANO — Dashboard SSOT")
 with col2:
-    st.metric("📊 Registros Totales", len(df))
+    st.metric("📊 Registros Ops", len(df_ops))
 with col3:
     fecha_ref = (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y")
     st.metric("📅 Fecha Ref.", fecha_ref)
@@ -161,20 +198,18 @@ with tab1:
     # Filtros
     col1, col2, col3 = st.columns(3)
     with col1:
-        fecha_desde = st.date_input("Desde", value=df['Fecha'].min().date())
+        fecha_desde = st.date_input("Desde", value=df_ops['Fecha'].min().date())
     with col2:
-        fecha_hasta = st.date_input("Hasta", value=df['Fecha'].max().date())
+        fecha_hasta = st.date_input("Hasta", value=df_ops['Fecha'].max().date())
     with col3:
         meses_dict = {
             "Todos": None, "Enero": 1, "Febrero": 2, "Marzo": 3,
-            "Abril": 4, "Mayo": 5, "Junio": 6, "Julio": 7,
-            "Agosto": 8, "Septiembre": 9, "Octubre": 10,
-            "Noviembre": 11, "Diciembre": 12
+            "Abril": 4, "Mayo": 5
         }
         mes_filtro = st.selectbox("Mes", list(meses_dict.keys()))
     
     # Aplicar filtros
-    df_filtered = df.copy()
+    df_filtered = df_ops.copy()
     df_filtered = df_filtered[
         (df_filtered['Fecha'] >= pd.to_datetime(fecha_desde)) &
         (df_filtered['Fecha'] <= pd.to_datetime(fecha_hasta))
@@ -328,13 +363,86 @@ with tab1:
 # TAB 2: TESORERÍA
 # ============================================
 with tab2:
-    st.info("🚧 **Sección de Tesorería** — Requiere datos de la segunda hoja del Google Sheet")
-    st.markdown("""
-    Para activar esta sección, necesitas:
-    1. Tener una segunda hoja en tu Google Sheet llamada "Tesorería"
-    2. Exportar esa hoja como CSV separado
-    3. Actualizar el código para cargar ambas hojas
-    """)
+    if df_teso.empty:
+        st.warning("⚠️ No hay datos de Tesorería disponibles")
+    else:
+        st.markdown("### Indicadores Tesorería")
+        
+        ultimo_t = df_teso.iloc[-1]
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                "💰 Efectivo en Bancos",
+                f"Bs {ultimo_t['Efectivo_en_Bancos']:,.0f}"
+            )
+        
+        with col2:
+            st.metric(
+                "🏦 Caja Central",
+                f"Bs {ultimo_t['Caja_Central_Mineral']:,.0f}"
+            )
+        
+        with col3:
+            st.metric(
+                "📈 CxC Vigente",
+                f"Bs {ultimo_t['CxC_Vigente']:,.0f}"
+            )
+        
+        with col4:
+            st.metric(
+                "📉 CxP Mineral",
+                f"Bs {ultimo_t['CxP_Mineral']:,.0f}"
+            )
+        
+        st.markdown("---")
+        
+        # Gráficos Tesorería
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### Efectivo: Bancos & Caja")
+            fig_t1 = go.Figure()
+            fig_t1.add_trace(go.Scatter(
+                x=df_teso['Fecha'],
+                y=df_teso['Efectivo_en_Bancos'],
+                name='Bancos',
+                line=dict(color='#3DDC84', width=2)
+            ))
+            fig_t1.add_trace(go.Scatter(
+                x=df_teso['Fecha'],
+                y=df_teso['Caja_Central_Mineral'],
+                name='Caja',
+                line=dict(color='#C8A951', width=2)
+            ))
+            fig_t1.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#6B7C99',
+                height=300
+            )
+            st.plotly_chart(fig_t1, use_container_width=True)
+        
+        with col2:
+            st.markdown("#### CxC vs CxP")
+            fig_t2 = px.bar(
+                df_teso,
+                x='Fecha',
+                y=['CxC_Vigente', 'CxP_Mineral'],
+                barmode='group',
+                color_discrete_map={
+                    'CxC_Vigente': '#3DDC84',
+                    'CxP_Mineral': '#FF4D6D'
+                }
+            )
+            fig_t2.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#6B7C99',
+                height=300
+            )
+            st.plotly_chart(fig_t2, use_container_width=True)
 
 # ============================================
 # TAB 3: ANÁLISIS PREDICTIVO
@@ -342,11 +450,10 @@ with tab2:
 with tab3:
     st.markdown("### 🔮 Regresión Lineal — Inventario Broza")
     
-    # Regresión manual (sin sklearn)
+    # Regresión manual
     X = np.arange(len(df_filtered))
     y = df_filtered['Inventario_Total_Broza_TMH'].values
     
-    # Cálculo manual de regresión lineal
     n = len(X)
     sum_x = X.sum()
     sum_y = y.sum()
@@ -358,7 +465,6 @@ with tab3:
     
     y_pred = slope * X + intercept
     
-    # R²
     y_mean = y.mean()
     ss_tot = ((y - y_mean) ** 2).sum()
     ss_res = ((y - y_pred) ** 2).sum()
@@ -366,13 +472,12 @@ with tab3:
     
     proy_30 = slope * 30
     
-    # Resultados
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("#### Regresión Lineal")
         st.metric("Ecuación", f"y = {slope:.4f}x + {intercept:.2f}")
-        st.metric("R² (bondad ajuste)", f"{r2*100:.1f}%")
+        st.metric("R²", f"{r2*100:.1f}%")
         st.metric("Pendiente", f"{slope:+.2f} TMH/día")
         st.metric("Proyección +30 días", f"{proy_30:+.2f} TMH")
         
@@ -381,15 +486,13 @@ with tab3:
         st.markdown(f"**Tendencia:** :{color}[{tendencia}]")
     
     with col2:
-        st.markdown("#### Estadísticas Descriptivas")
+        st.markdown("#### Estadísticas")
         st.metric("Media", f"{y.mean():,.2f} TMH")
         st.metric("Máximo", f"{y.max():,.2f} TMH")
         st.metric("Mínimo", f"{y.min():,.2f} TMH")
         st.metric("Desv. Estándar", f"{y.std():,.2f} TMH")
-        st.metric("Registros", f"{len(df_filtered)} días")
     
-    # Gráfico
-    st.markdown("#### Inventario Real vs Tendencia Lineal")
+    st.markdown("#### Inventario Real vs Tendencia")
     fig_reg = go.Figure()
     fig_reg.add_trace(go.Scatter(
         x=df_filtered['Fecha'],
@@ -409,8 +512,7 @@ with tab3:
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font_color='#6B7C99',
-        height=400,
-        margin=dict(l=0, r=0, t=20, b=0)
+        height=400
     )
     st.plotly_chart(fig_reg, use_container_width=True)
 
@@ -420,23 +522,16 @@ with tab3:
 with tab4:
     st.markdown("### 📋 Tabla de Datos — Operaciones")
     
-    # Mostrar tabla
     st.dataframe(
-        df_filtered.style.format({
-            'Inventario_Total_Broza_TMH': '{:,.2f}',
-            'Ingreso_Broza_TMH': '{:,.2f}',
-            'Ley_Zn': '{:.2f}%',
-            'Ley_AG': '{:.2f}%',
-            'Ley_PB': '{:.2f}%'
-        }),
+        df_filtered[['Fecha', 'Ingreso_Broza_TMH', 'Inventario_Total_Broza_TMH',
+                     'Ley_Zn', 'Ley_AG', 'Ley_PB', 'TMH_Procesadas_dia']],
         use_container_width=True,
         height=500
     )
     
-    # Descarga
     csv = df_filtered.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 Descargar datos filtrados (CSV)",
+        label="📥 Descargar CSV",
         data=csv,
         file_name=f'parkano_ops_{datetime.now().strftime("%Y%m%d_%H%M")}.csv',
         mime='text/csv',
@@ -444,4 +539,4 @@ with tab4:
 
 # Footer
 st.markdown("---")
-st.caption(f"📊 Dashboard SSOT — Minera Parkano | Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | {len(df)} registros totales | Auto-refresh cada 5 minutos")
+st.caption(f"📊 Dashboard SSOT — Minera Parkano | {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | {len(df_ops)} registros | Auto-refresh cada 5 min")
