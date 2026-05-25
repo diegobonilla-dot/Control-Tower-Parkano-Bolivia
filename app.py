@@ -98,7 +98,7 @@ URL_TESORERIA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?forma
 def limpiar_numero(valor):
     """Limpia formatos de números bolivianos"""
     if pd.isna(valor):
-        return 0
+        return 0.0
     if isinstance(valor, (int, float)):
         return float(valor)
     # Remover Bs, comas, espacios
@@ -106,7 +106,7 @@ def limpiar_numero(valor):
     try:
         return float(valor_str)
     except:
-        return 0
+        return 0.0
 
 @st.cache_data(ttl=300)
 def load_operaciones():
@@ -117,7 +117,7 @@ def load_operaciones():
         # Parsear fechas
         df['Fecha'] = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce')
         
-        # Limpiar columnas numéricas
+        # Limpiar columnas numéricas - solo las que sabemos que existen
         columnas_numericas = [
             'Ingreso_Broza_TMH', 'Inventario_Total_Broza_TMH',
             'Ley_Zn', 'Ley_AG', 'Ley_PB',
@@ -130,6 +130,9 @@ def load_operaciones():
         
         # Eliminar filas con fechas inválidas
         df = df.dropna(subset=['Fecha'])
+        
+        # Resetear índice
+        df = df.reset_index(drop=True)
         
         return df
     except Exception as e:
@@ -157,6 +160,9 @@ def load_tesoreria():
         
         # Eliminar filas con fechas inválidas
         df = df.dropna(subset=['Fecha'])
+        
+        # Resetear índice
+        df = df.reset_index(drop=True)
         
         return df
     except Exception as e:
@@ -218,15 +224,26 @@ with tab1:
     if mes_filtro != "Todos":
         df_filtered = df_filtered[df_filtered['Fecha'].dt.month == meses_dict[mes_filtro]]
     
+    # Resetear índice después de filtrar
+    df_filtered = df_filtered.reset_index(drop=True)
+    
+    if len(df_filtered) == 0:
+        st.warning("⚠️ No hay datos para el rango seleccionado")
+        st.stop()
+    
     st.markdown("### Indicadores Clave")
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     
-    ultimo = df_filtered.iloc[-1]
+    # Usar .iloc[-1] de forma segura
+    ultimo_inv = float(df_filtered['Inventario_Total_Broza_TMH'].iloc[-1])
+    ultimo_zn = float(df_filtered['Ley_Zn'].iloc[-1])
+    ultimo_ag = float(df_filtered['Ley_AG'].iloc[-1])
+    ultimo_pb = float(df_filtered['Ley_PB'].iloc[-1])
     
     with col1:
         st.metric(
             "Inventario Broza (TMH)",
-            f"{ultimo['Inventario_Total_Broza_TMH']:,.2f}"
+            f"{ultimo_inv:,.2f}"
         )
     
     with col2:
@@ -234,7 +251,7 @@ with tab1:
         st.metric(
             "Ley Zn Promedio",
             f"{ley_zn_avg:.2f}%",
-            delta=f"Último: {ultimo['Ley_Zn']:.2f}%"
+            delta=f"Último: {ultimo_zn:.2f}%"
         )
     
     with col3:
@@ -242,7 +259,7 @@ with tab1:
         st.metric(
             "Ley Ag Promedio",
             f"{ley_ag_avg:.2f}%",
-            delta=f"Último: {ultimo['Ley_AG']:.2f}%"
+            delta=f"Último: {ultimo_ag:.2f}%"
         )
     
     with col4:
@@ -250,7 +267,7 @@ with tab1:
         st.metric(
             "Ley Pb Promedio",
             f"{ley_pb_avg:.2f}%",
-            delta=f"Último: {ultimo['Ley_PB']:.2f}%"
+            delta=f"Último: {ultimo_pb:.2f}%"
         )
     
     with col5:
@@ -268,8 +285,8 @@ with tab1:
         )
     
     # Alerta
-    if ultimo['Inventario_Total_Broza_TMH'] < 500:
-        st.error(f"⚠️ **Inventario Crítico** — {ultimo['Inventario_Total_Broza_TMH']:,.2f} TMH (umbral: 500 TMH)")
+    if ultimo_inv < 500:
+        st.error(f"⚠️ **Inventario Crítico** — {ultimo_inv:,.2f} TMH (umbral: 500 TMH)")
     
     st.markdown("---")
     
@@ -368,32 +385,36 @@ with tab2:
     else:
         st.markdown("### Indicadores Tesorería")
         
-        ultimo_t = df_teso.iloc[-1]
+        # Acceso seguro al último registro
+        ultimo_bancos = float(df_teso['Efectivo_en_Bancos'].iloc[-1])
+        ultimo_caja = float(df_teso['Caja_Central_Mineral'].iloc[-1])
+        ultimo_cxc = float(df_teso['CxC_Vigente'].iloc[-1])
+        ultimo_cxp = float(df_teso['CxP_Mineral'].iloc[-1])
         
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.metric(
                 "💰 Efectivo en Bancos",
-                f"Bs {ultimo_t['Efectivo_en_Bancos']:,.0f}"
+                f"Bs {ultimo_bancos:,.0f}"
             )
         
         with col2:
             st.metric(
                 "🏦 Caja Central",
-                f"Bs {ultimo_t['Caja_Central_Mineral']:,.0f}"
+                f"Bs {ultimo_caja:,.0f}"
             )
         
         with col3:
             st.metric(
                 "📈 CxC Vigente",
-                f"Bs {ultimo_t['CxC_Vigente']:,.0f}"
+                f"Bs {ultimo_cxc:,.0f}"
             )
         
         with col4:
             st.metric(
                 "📉 CxP Mineral",
-                f"Bs {ultimo_t['CxP_Mineral']:,.0f}"
+                f"Bs {ultimo_cxp:,.0f}"
             )
         
         st.markdown("---")
@@ -426,21 +447,25 @@ with tab2:
         
         with col2:
             st.markdown("#### CxC vs CxP")
-            fig_t2 = px.bar(
-                df_teso,
-                x='Fecha',
-                y=['CxC_Vigente', 'CxP_Mineral'],
-                barmode='group',
-                color_discrete_map={
-                    'CxC_Vigente': '#3DDC84',
-                    'CxP_Mineral': '#FF4D6D'
-                }
-            )
+            fig_t2 = go.Figure()
+            fig_t2.add_trace(go.Bar(
+                x=df_teso['Fecha'],
+                y=df_teso['CxC_Vigente'],
+                name='CxC Vigente',
+                marker_color='#3DDC84'
+            ))
+            fig_t2.add_trace(go.Bar(
+                x=df_teso['Fecha'],
+                y=df_teso['CxP_Mineral'],
+                name='CxP Mineral',
+                marker_color='#FF4D6D'
+            ))
             fig_t2.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 font_color='#6B7C99',
-                height=300
+                height=300,
+                barmode='group'
             )
             st.plotly_chart(fig_t2, use_container_width=True)
 
