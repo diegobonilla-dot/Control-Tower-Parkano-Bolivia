@@ -16,552 +16,174 @@ st.set_page_config(
 # CSS mejorado
 st.markdown("""
 <style>
-    [data-testid="stAppViewContainer"] {
-        background: linear-gradient(135deg, #0B0F1A 0%, #131B2E 100%);
-    }
-    [data-testid="stHeader"] {
-        background: transparent;
-    }
-    .stMetric {
-        background: linear-gradient(135deg, #131B2E, #1A2438);
-        padding: 1.2rem;
-        border-radius: 10px;
-        border-left: 3px solid #C8A951;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    }
-    .stMetric label {
-        color: #6B7C99 !important;
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        font-weight: 700;
-    }
-    .stMetric [data-testid="stMetricValue"] {
-        color: #E8E0CC !important;
-        font-size: 1.6rem;
-        font-weight: 800;
-    }
-    .stMetric [data-testid="stMetricDelta"] {
-        color: #3DDC84 !important;
-        font-size: 0.75rem;
-    }
-    h1 {
-        color: #C8A951 !important;
-        font-weight: 800;
-        letter-spacing: 0.02em;
-    }
-    h2, h3 {
-        color: #C8A951 !important;
-        font-weight: 700;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 0.5rem;
-        background: #131B2E;
-        padding: 0.5rem;
-        border-radius: 10px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background: #1A2438;
-        border-radius: 8px;
-        color: #6B7C99;
-        padding: 0.75rem 1.5rem;
-        font-weight: 600;
-        border: none;
-    }
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #C8A951, #9A7D2E);
-        color: #0B0F1A !important;
-    }
-    .stSelectbox > div > div {
-        background: #1A2438;
-        color: #E8E0CC;
-        border: 1px solid #C8A951;
-    }
-    .stDateInput > div > div > input {
-        background: #1A2438;
-        color: #E8E0CC;
-        border: 1px solid #C8A951;
-    }
-    div[data-testid="stDataFrame"] {
-        background: #131B2E;
-    }
+    [data-testid="stAppViewContainer"] {background: linear-gradient(135deg, #0B0F1A 0%, #131B2E 100%);}
+    [data-testid="stHeader"] {background: transparent;}
+    .stMetric {background: linear-gradient(135deg, #131B2E, #1A2438);padding: 1.2rem;border-radius: 10px;border-left: 3px solid #C8A951;box-shadow: 0 4px 6px rgba(0,0,0,0.3);}
+    .stMetric label {color: #6B7C99 !important;font-size: 0.7rem;text-transform: uppercase;letter-spacing: 0.1em;font-weight: 700;}
+    .stMetric [data-testid="stMetricValue"] {color: #E8E0CC !important;font-size: 1.6rem;font-weight: 800;}
+    .stMetric [data-testid="stMetricDelta"] {color: #3DDC84 !important;font-size: 0.75rem;}
+    h1 {color: #C8A951 !important;font-weight: 800;letter-spacing: 0.02em;}
+    h2, h3 {color: #C8A951 !important;font-weight: 700;}
+    .stTabs [data-baseweb="tab-list"] {gap: 0.5rem;background: #131B2E;padding: 0.5rem;border-radius: 10px;}
+    .stTabs [data-baseweb="tab"] {background: #1A2438;border-radius: 8px;color: #6B7C99;padding: 0.75rem 1.5rem;font-weight: 600;border: none;}
+    .stTabs [aria-selected="true"] {background: linear-gradient(135deg, #C8A951, #9A7D2E);color: #0B0F1A !important;}
 </style>
 """, unsafe_allow_html=True)
 
-# SHEET ID
 SHEET_ID = "1jh_7rzOG1pisxwIIiT1CCfY3F0fdXmNA9vaaZFJUfns"
-
-# URLs separadas para cada hoja
 URL_OPERACIONES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=158096369"
 URL_TESORERIA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
 
 def limpiar_numero(valor):
-    """Limpia formatos de números bolivianos"""
-    if pd.isna(valor):
-        return 0.0
-    if isinstance(valor, (int, float)):
-        return float(valor)
-    # Remover Bs, comas, espacios
+    if pd.isna(valor): return 0.0
+    if isinstance(valor, (int, float)): return float(valor)
     valor_str = str(valor).replace('Bs', '').replace(',', '').replace(' ', '').strip()
-    try:
-        return float(valor_str)
-    except:
-        return 0.0
+    try: return float(valor_str)
+    except: return 0.0
 
 @st.cache_data(ttl=300)
 def load_operaciones():
-    """Carga datos de la hoja Operaciones"""
     try:
         df = pd.read_csv(URL_OPERACIONES)
-        
-        # Parsear fechas
+        # Limpiar nombres de columnas (quitar espacios extra)
+        df.columns = df.columns.str.strip()
         df['Fecha'] = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce')
         
-        # Limpiar columnas numéricas - solo las que sabemos que existen
-        columnas_numericas = [
-            'Ingreso_Broza_TMH', 'Inventario_Total_Broza_TMH',
-            'Ley_Zn', 'Ley_AG', 'Ley_PB',
-            'Inventario_CC_Zn', 'Inventario_CC_Pb', 'TMH_Procesadas_dia'
-        ]
+        # Mapeo de columnas
+        col_map = {
+            'Ingreso_Broza_TMH': 'Ingreso_Broza_TMH',
+            'Inventario_Total_Broza_TMH': 'Inventario_Total_Broza_TMH',
+            'Ley_Zn': 'Ley_Zn',
+            'Ley_AG': 'Ley_AG',
+            'Ley_PB': 'Ley_PB',
+            'Inventario_CC_Zn': 'Inventario_CC_Zn',
+            'Inventario_CC_Pb': 'Inventario_CC_Pb',
+            'TMH_Procesadas_dia': 'TMH_Procesadas_dia'
+        }
         
-        for col in columnas_numericas:
+        for col in col_map.values():
             if col in df.columns:
                 df[col] = df[col].apply(limpiar_numero)
         
-        # Eliminar filas con fechas inválidas
-        df = df.dropna(subset=['Fecha'])
-        
-        # Resetear índice
-        df = df.reset_index(drop=True)
-        
+        df = df.dropna(subset=['Fecha']).reset_index(drop=True)
         return df
     except Exception as e:
-        st.error(f"❌ Error al cargar Operaciones: {str(e)}")
+        st.error(f"❌ Error: {str(e)}")
         return pd.DataFrame()
 
 @st.cache_data(ttl=300)
 def load_tesoreria():
-    """Carga datos de la hoja Tesorería"""
     try:
         df = pd.read_csv(URL_TESORERIA)
-        
-        # Parsear fechas
+        df.columns = df.columns.str.strip()
         df['Fecha'] = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce')
         
-        # Limpiar columnas numéricas
-        columnas_numericas = [
-            'Efectivo_en_Bancos', 'Caja_Central_Mineral',
-            'CxC_Vigente', 'CxC_Vencidos', 'CxP_Mineral'
-        ]
-        
-        for col in columnas_numericas:
+        cols = ['Efectivo_en_Bancos', 'Caja_Central_Mineral', 'CxC_Vigente', 'CxC_Vencidos', 'CxP_Mineral']
+        for col in cols:
             if col in df.columns:
                 df[col] = df[col].apply(limpiar_numero)
         
-        # Eliminar filas con fechas inválidas
-        df = df.dropna(subset=['Fecha'])
-        
-        # Resetear índice
-        df = df.reset_index(drop=True)
-        
+        df = df.dropna(subset=['Fecha']).reset_index(drop=True)
         return df
     except Exception as e:
-        st.error(f"❌ Error al cargar Tesorería: {str(e)}")
+        st.error(f"❌ Error: {str(e)}")
         return pd.DataFrame()
 
-# Cargar datos
-with st.spinner("🔄 Cargando datos desde Google Sheets..."):
+with st.spinner("🔄 Cargando..."):
     df_ops = load_operaciones()
     df_teso = load_tesoreria()
 
 if df_ops.empty:
-    st.error("⚠️ No se pudieron cargar los datos de Operaciones.")
+    st.error("⚠️ No se pudieron cargar los datos")
     st.stop()
 
-# ============================================
 # HEADER
-# ============================================
 col1, col2, col3 = st.columns([3, 1, 1])
-with col1:
-    st.markdown("# ⛏️ MINERA PARKANO — Dashboard SSOT")
-with col2:
-    st.metric("📊 Registros Ops", len(df_ops))
-with col3:
-    fecha_ref = (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y")
-    st.metric("📅 Fecha Ref.", fecha_ref)
+with col1: st.markdown("# ⛏️ MINERA PARKANO — Dashboard SSOT")
+with col2: st.metric("📊 Registros", len(df_ops))
+with col3: st.metric("📅 Ref.", (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y"))
 
 st.markdown("---")
 
-# ============================================
-# TABS
-# ============================================
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Operaciones", "💰 Tesorería", "🔮 Análisis Predictivo", "📋 Datos Completos"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Operaciones", "💰 Tesorería", "🔮 Análisis Predictivo", "📋 Datos"])
 
-# ============================================
-# TAB 1: OPERACIONES
-# ============================================
 with tab1:
-    # Filtros
     col1, col2, col3 = st.columns(3)
-    with col1:
-        fecha_desde = st.date_input("Desde", value=df_ops['Fecha'].min().date())
-    with col2:
-        fecha_hasta = st.date_input("Hasta", value=df_ops['Fecha'].max().date())
-    with col3:
-        meses_dict = {
-            "Todos": None, "Enero": 1, "Febrero": 2, "Marzo": 3,
-            "Abril": 4, "Mayo": 5
-        }
-        mes_filtro = st.selectbox("Mes", list(meses_dict.keys()))
+    with col1: fecha_desde = st.date_input("Desde", value=df_ops['Fecha'].min().date())
+    with col2: fecha_hasta = st.date_input("Hasta", value=df_ops['Fecha'].max().date())
+    with col3: mes_filtro = st.selectbox("Mes", ["Todos", "Enero", "Febrero", "Marzo", "Abril", "Mayo"])
     
-    # Aplicar filtros
-    df_filtered = df_ops.copy()
-    df_filtered = df_filtered[
-        (df_filtered['Fecha'] >= pd.to_datetime(fecha_desde)) &
-        (df_filtered['Fecha'] <= pd.to_datetime(fecha_hasta))
-    ]
-    
+    df_f = df_ops[(df_ops['Fecha'] >= pd.to_datetime(fecha_desde)) & (df_ops['Fecha'] <= pd.to_datetime(fecha_hasta))].reset_index(drop=True)
     if mes_filtro != "Todos":
-        df_filtered = df_filtered[df_filtered['Fecha'].dt.month == meses_dict[mes_filtro]]
+        meses = {"Enero": 1, "Febrero": 2, "Marzo": 3, "Abril": 4, "Mayo": 5}
+        df_f = df_f[df_f['Fecha'].dt.month == meses[mes_filtro]].reset_index(drop=True)
     
-    # Resetear índice después de filtrar
-    df_filtered = df_filtered.reset_index(drop=True)
-    
-    if len(df_filtered) == 0:
-        st.warning("⚠️ No hay datos para el rango seleccionado")
+    if len(df_f) == 0:
+        st.warning("⚠️ Sin datos")
         st.stop()
     
-    st.markdown("### Indicadores Clave")
+    st.markdown("### Indicadores")
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     
-    # Usar .iloc[-1] de forma segura
-    ultimo_inv = float(df_filtered['Inventario_Total_Broza_TMH'].iloc[-1])
-    ultimo_zn = float(df_filtered['Ley_Zn'].iloc[-1])
-    ultimo_ag = float(df_filtered['Ley_AG'].iloc[-1])
-    ultimo_pb = float(df_filtered['Ley_PB'].iloc[-1])
+    with col1: st.metric("Inv. Broza (TMH)", f"{float(df_f['Inventario_Total_Broza_TMH'].iloc[-1]):,.2f}")
+    with col2: st.metric("Ley Zn", f"{df_f['Ley_Zn'].mean():.2f}%")
+    with col3: st.metric("Ley Ag", f"{df_f['Ley_AG'].mean():.2f}%")
+    with col4: st.metric("Ley Pb", f"{df_f['Ley_PB'].mean():.2f}%")
+    with col5: st.metric("Total Ingreso", f"{df_f['Ingreso_Broza_TMH'].sum():,.0f}")
+    with col6: st.metric("TMH Proc.", f"{df_f['TMH_Procesadas_dia'].sum():,.0f}")
     
-    with col1:
-        st.metric(
-            "Inventario Broza (TMH)",
-            f"{ultimo_inv:,.2f}"
-        )
-    
-    with col2:
-        ley_zn_avg = df_filtered['Ley_Zn'].mean()
-        st.metric(
-            "Ley Zn Promedio",
-            f"{ley_zn_avg:.2f}%",
-            delta=f"Último: {ultimo_zn:.2f}%"
-        )
-    
-    with col3:
-        ley_ag_avg = df_filtered['Ley_AG'].mean()
-        st.metric(
-            "Ley Ag Promedio",
-            f"{ley_ag_avg:.2f}%",
-            delta=f"Último: {ultimo_ag:.2f}%"
-        )
-    
-    with col4:
-        ley_pb_avg = df_filtered['Ley_PB'].mean()
-        st.metric(
-            "Ley Pb Promedio",
-            f"{ley_pb_avg:.2f}%",
-            delta=f"Último: {ultimo_pb:.2f}%"
-        )
-    
-    with col5:
-        total_ingreso = df_filtered['Ingreso_Broza_TMH'].sum()
-        st.metric(
-            "Total Ingreso (TMH)",
-            f"{total_ingreso:,.0f}"
-        )
-    
-    with col6:
-        tmh_proc = df_filtered['TMH_Procesadas_dia'].sum()
-        st.metric(
-            "TMH Procesadas",
-            f"{tmh_proc:,.0f}"
-        )
-    
-    # Alerta
-    if ultimo_inv < 500:
-        st.error(f"⚠️ **Inventario Crítico** — {ultimo_inv:,.2f} TMH (umbral: 500 TMH)")
+    if float(df_f['Inventario_Total_Broza_TMH'].iloc[-1]) < 500:
+        st.error(f"⚠️ Inventario Crítico: {float(df_f['Inventario_Total_Broza_TMH'].iloc[-1]):,.2f} TMH")
     
     st.markdown("---")
-    
-    # Gráficos
     col1, col2 = st.columns(2)
-    
     with col1:
-        st.markdown("#### Inventario Broza (TMH)")
-        fig1 = px.area(
-            df_filtered,
-            x='Fecha',
-            y='Inventario_Total_Broza_TMH',
-            color_discrete_sequence=['#C8A951']
-        )
-        fig1.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#6B7C99',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0)
-        )
-        st.plotly_chart(fig1, use_container_width=True)
+        st.markdown("#### Inventario Broza")
+        fig = px.area(df_f, x='Fecha', y='Inventario_Total_Broza_TMH', color_discrete_sequence=['#C8A951'])
+        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#6B7C99', height=300)
+        st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        st.markdown("#### Leyes Zn / Ag / Pb (%)")
-        fig2 = go.Figure()
-        fig2.add_trace(go.Scatter(
-            x=df_filtered['Fecha'],
-            y=df_filtered['Ley_Zn'],
-            name='Zn%',
-            line=dict(color='#4A9B8E', width=2)
-        ))
-        fig2.add_trace(go.Scatter(
-            x=df_filtered['Fecha'],
-            y=df_filtered['Ley_AG'],
-            name='Ag%',
-            line=dict(color='#C8A951', width=2)
-        ))
-        fig2.add_trace(go.Scatter(
-            x=df_filtered['Fecha'],
-            y=df_filtered['Ley_PB'],
-            name='Pb%',
-            line=dict(color='#8B6FA6', width=2)
-        ))
-        fig2.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#6B7C99',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0)
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-    
-    col3, col4 = st.columns(2)
-    
-    with col3:
-        st.markdown("#### Ingreso Broza Diario (TMH)")
-        fig3 = px.bar(
-            df_filtered,
-            x='Fecha',
-            y='Ingreso_Broza_TMH',
-            color_discrete_sequence=['#4A9B8E']
-        )
-        fig3.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#6B7C99',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0)
-        )
-        st.plotly_chart(fig3, use_container_width=True)
-    
-    with col4:
-        st.markdown("#### TMH Procesadas por Día")
-        fig4 = px.bar(
-            df_filtered,
-            x='Fecha',
-            y='TMH_Procesadas_dia',
-            color_discrete_sequence=['#8B6FA6']
-        )
-        fig4.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#6B7C99',
-            height=300,
-            margin=dict(l=0, r=0, t=20, b=0)
-        )
-        st.plotly_chart(fig4, use_container_width=True)
+        st.markdown("#### Leyes")
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df_f['Fecha'], y=df_f['Ley_Zn'], name='Zn%', line=dict(color='#4A9B8E', width=2)))
+        fig.add_trace(go.Scatter(x=df_f['Fecha'], y=df_f['Ley_AG'], name='Ag%', line=dict(color='#C8A951', width=2)))
+        fig.add_trace(go.Scatter(x=df_f['Fecha'], y=df_f['Ley_PB'], name='Pb%', line=dict(color='#8B6FA6', width=2)))
+        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#6B7C99', height=300)
+        st.plotly_chart(fig, use_container_width=True)
 
-# ============================================
-# TAB 2: TESORERÍA
-# ============================================
 with tab2:
     if df_teso.empty:
-        st.warning("⚠️ No hay datos de Tesorería disponibles")
+        st.warning("⚠️ Sin datos de Tesorería")
     else:
-        st.markdown("### Indicadores Tesorería")
-        
-        # Acceso seguro al último registro
-        ultimo_bancos = float(df_teso['Efectivo_en_Bancos'].iloc[-1])
-        ultimo_caja = float(df_teso['Caja_Central_Mineral'].iloc[-1])
-        ultimo_cxc = float(df_teso['CxC_Vigente'].iloc[-1])
-        ultimo_cxp = float(df_teso['CxP_Mineral'].iloc[-1])
-        
+        st.markdown("### Tesorería")
         col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric(
-                "💰 Efectivo en Bancos",
-                f"Bs {ultimo_bancos:,.0f}"
-            )
-        
-        with col2:
-            st.metric(
-                "🏦 Caja Central",
-                f"Bs {ultimo_caja:,.0f}"
-            )
-        
-        with col3:
-            st.metric(
-                "📈 CxC Vigente",
-                f"Bs {ultimo_cxc:,.0f}"
-            )
-        
-        with col4:
-            st.metric(
-                "📉 CxP Mineral",
-                f"Bs {ultimo_cxp:,.0f}"
-            )
-        
-        st.markdown("---")
-        
-        # Gráficos Tesorería
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### Efectivo: Bancos & Caja")
-            fig_t1 = go.Figure()
-            fig_t1.add_trace(go.Scatter(
-                x=df_teso['Fecha'],
-                y=df_teso['Efectivo_en_Bancos'],
-                name='Bancos',
-                line=dict(color='#3DDC84', width=2)
-            ))
-            fig_t1.add_trace(go.Scatter(
-                x=df_teso['Fecha'],
-                y=df_teso['Caja_Central_Mineral'],
-                name='Caja',
-                line=dict(color='#C8A951', width=2)
-            ))
-            fig_t1.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='#6B7C99',
-                height=300
-            )
-            st.plotly_chart(fig_t1, use_container_width=True)
-        
-        with col2:
-            st.markdown("#### CxC vs CxP")
-            fig_t2 = go.Figure()
-            fig_t2.add_trace(go.Bar(
-                x=df_teso['Fecha'],
-                y=df_teso['CxC_Vigente'],
-                name='CxC Vigente',
-                marker_color='#3DDC84'
-            ))
-            fig_t2.add_trace(go.Bar(
-                x=df_teso['Fecha'],
-                y=df_teso['CxP_Mineral'],
-                name='CxP Mineral',
-                marker_color='#FF4D6D'
-            ))
-            fig_t2.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color='#6B7C99',
-                height=300,
-                barmode='group'
-            )
-            st.plotly_chart(fig_t2, use_container_width=True)
+        with col1: st.metric("💰 Bancos", f"Bs {float(df_teso['Efectivo_en_Bancos'].iloc[-1]):,.0f}")
+        with col2: st.metric("🏦 Caja", f"Bs {float(df_teso['Caja_Central_Mineral'].iloc[-1]):,.0f}")
+        with col3: st.metric("📈 CxC", f"Bs {float(df_teso['CxC_Vigente'].iloc[-1]):,.0f}")
+        with col4: st.metric("📉 CxP", f"Bs {float(df_teso['CxP_Mineral'].iloc[-1]):,.0f}")
 
-# ============================================
-# TAB 3: ANÁLISIS PREDICTIVO
-# ============================================
 with tab3:
-    st.markdown("### 🔮 Regresión Lineal — Inventario Broza")
-    
-    # Regresión manual
-    X = np.arange(len(df_filtered))
-    y = df_filtered['Inventario_Total_Broza_TMH'].values
-    
+    st.markdown("### 🔮 Análisis Predictivo")
+    X = np.arange(len(df_f))
+    y = df_f['Inventario_Total_Broza_TMH'].values
     n = len(X)
-    sum_x = X.sum()
-    sum_y = y.sum()
-    sum_xy = (X * y).sum()
-    sum_x2 = (X ** 2).sum()
-    
-    slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x ** 2)
-    intercept = (sum_y - slope * sum_x) / n
-    
-    y_pred = slope * X + intercept
-    
-    y_mean = y.mean()
-    ss_tot = ((y - y_mean) ** 2).sum()
-    ss_res = ((y - y_pred) ** 2).sum()
-    r2 = 1 - (ss_res / ss_tot)
-    
-    proy_30 = slope * 30
+    slope = (n*(X*y).sum() - X.sum()*y.sum()) / (n*(X**2).sum() - X.sum()**2)
+    intercept = (y.sum() - slope*X.sum()) / n
+    y_pred = slope*X + intercept
+    r2 = 1 - ((y - y_pred)**2).sum() / ((y - y.mean())**2).sum()
     
     col1, col2 = st.columns(2)
-    
     with col1:
-        st.markdown("#### Regresión Lineal")
         st.metric("Ecuación", f"y = {slope:.4f}x + {intercept:.2f}")
         st.metric("R²", f"{r2*100:.1f}%")
-        st.metric("Pendiente", f"{slope:+.2f} TMH/día")
-        st.metric("Proyección +30 días", f"{proy_30:+.2f} TMH")
-        
-        tendencia = "↗ CRECIENTE" if slope > 0 else "↘ DECRECIENTE"
-        color = "green" if slope > 0 else "red"
-        st.markdown(f"**Tendencia:** :{color}[{tendencia}]")
-    
     with col2:
-        st.markdown("#### Estadísticas")
-        st.metric("Media", f"{y.mean():,.2f} TMH")
-        st.metric("Máximo", f"{y.max():,.2f} TMH")
-        st.metric("Mínimo", f"{y.min():,.2f} TMH")
-        st.metric("Desv. Estándar", f"{y.std():,.2f} TMH")
-    
-    st.markdown("#### Inventario Real vs Tendencia")
-    fig_reg = go.Figure()
-    fig_reg.add_trace(go.Scatter(
-        x=df_filtered['Fecha'],
-        y=y,
-        name='Real',
-        line=dict(color='#C8A951', width=2),
-        fill='tozeroy',
-        fillcolor='rgba(200, 169, 81, 0.1)'
-    ))
-    fig_reg.add_trace(go.Scatter(
-        x=df_filtered['Fecha'],
-        y=y_pred,
-        name='Tendencia',
-        line=dict(color='#FF4D6D', width=3, dash='dash')
-    ))
-    fig_reg.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font_color='#6B7C99',
-        height=400
-    )
-    st.plotly_chart(fig_reg, use_container_width=True)
+        st.metric("Pendiente", f"{slope:+.2f} TMH/día")
+        st.metric("Proy. +30d", f"{slope*30:+.2f} TMH")
 
-# ============================================
-# TAB 4: DATOS COMPLETOS
-# ============================================
 with tab4:
-    st.markdown("### 📋 Tabla de Datos — Operaciones")
-    
-    st.dataframe(
-        df_filtered[['Fecha', 'Ingreso_Broza_TMH', 'Inventario_Total_Broza_TMH',
-                     'Ley_Zn', 'Ley_AG', 'Ley_PB', 'TMH_Procesadas_dia']],
-        use_container_width=True,
-        height=500
-    )
-    
-    csv = df_filtered.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Descargar CSV",
-        data=csv,
-        file_name=f'parkano_ops_{datetime.now().strftime("%Y%m%d_%H%M")}.csv',
-        mime='text/csv',
-    )
+    st.markdown("### Datos Completos")
+    st.dataframe(df_f[['Fecha', 'Ingreso_Broza_TMH', 'Inventario_Total_Broza_TMH', 'Ley_Zn', 'Ley_AG', 'Ley_PB']], height=500)
 
-# Footer
 st.markdown("---")
-st.caption(f"📊 Dashboard SSOT — Minera Parkano | {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} | {len(df_ops)} registros | Auto-refresh cada 5 min")
+st.caption(f"📊 Minera Parkano | {datetime.now().strftime('%d/%m/%Y %H:%M')} | {len(df_ops)} reg | Auto-refresh 5min")
