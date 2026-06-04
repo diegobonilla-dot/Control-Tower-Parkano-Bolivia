@@ -52,21 +52,24 @@ def detectar(df):
     return 'desconocido'
 
 @st.cache_data(ttl=300)
-def cargar_todo():
-    """Carga ambos GIDs y detecta automáticamente cuál es Operaciones y cuál Tesorería"""
+def cargar_todo(gids):
+    """Carga los GIDs dados y detecta automáticamente cuál es Operaciones y cuál Tesorería"""
     resultado = {'ops': None, 'teso': None}
-    for gid in [GID_A, GID_B]:
+    diag = []
+    for gid in gids:
         try:
-            raw = pd.read_csv(url(gid), dtype=str)
+            raw = pd.read_csv(url(gid), dtype=str,
+                              storage_options={'User-Agent': 'Mozilla/5.0'})
             raw.columns = raw.columns.str.strip()
             tipo = detectar(raw)
+            diag.append(f"GID {gid}: {len(raw)} filas, detectado='{tipo}', cols={list(raw.columns[:4])}")
             if tipo == 'ops' and resultado['ops'] is None:
                 resultado['ops'] = procesar_ops(raw)
             elif tipo == 'teso' and resultado['teso'] is None:
                 resultado['teso'] = procesar_teso(raw)
-        except Exception:
-            continue
-    return resultado['ops'], resultado['teso']
+        except Exception as e:
+            diag.append(f"GID {gid}: ERROR -> {type(e).__name__}: {str(e)[:120]}")
+    return resultado['ops'], resultado['teso'], diag
 
 def procesar_ops(raw):
     m = {}
@@ -114,11 +117,24 @@ def procesar_teso(raw):
     return df
 
 # ═══════════════════════ CARGAR ═══════════════════════
-df_ops, df_teso = cargar_todo()
+# Probar varios GIDs comunes para encontrar ambas hojas
+GIDS_PROBAR = ["0", "158096369", "1", "2"]
+df_ops, df_teso, diag = cargar_todo(GIDS_PROBAR)
 
 if df_ops is None or df_ops.empty:
-    st.error("⚠️ No se pudieron cargar los datos de Operaciones desde Google Sheets.")
+    st.error("⚠️ No se pudieron cargar los datos de Operaciones.")
+    with st.expander("🔍 Diagnóstico (ábrelo y compártelo si el error persiste)", expanded=True):
+        for d in diag:
+            st.code(d)
+        st.markdown("**Verifica que el Google Sheet esté compartido como: 'Cualquiera con el enlace → Lector'**")
+        st.markdown(f"URL probada ejemplo: `{url('0')}`")
     st.stop()
+
+if df_teso is None or df_teso.empty:
+    st.warning("⚠️ No se detectó la hoja de Tesorería. Operaciones sí cargó correctamente.")
+    with st.expander("🔍 Diagnóstico Tesorería"):
+        for d in diag:
+            st.code(d)
 
 # ─── Fecha referencia = última fecha CON datos de inventario ───
 def ultima_con_dato(df, col):
