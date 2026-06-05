@@ -24,8 +24,11 @@ hr{border-color:rgba(200,169,81,.18);margin:.8rem 0}
 """, unsafe_allow_html=True)
 
 SID = "1jh_7rzOG1pisxwIIiT1CCfY3F0fdXmNA9vaaZFJUfns"
-GID_A = "0"
-GID_B = "158096369"
+# GIDs confirmados directamente de la URL de Google Sheets
+GID_OPS  = "225954691"   # Pestaña "Operaciones" — confirmado
+GID_TESO = "158096369"   # Pestaña "Tesorería"   — confirmado
+URL_OPS  = f"https://docs.google.com/spreadsheets/d/{SID}/export?format=csv&gid={GID_OPS}"
+URL_TESO = f"https://docs.google.com/spreadsheets/d/{SID}/export?format=csv&gid={GID_TESO}"
 def url(gid): return f"https://docs.google.com/spreadsheets/d/{SID}/export?format=csv&gid={gid}"
 
 # ─── Conversión número boliviano: "5.971,56"→5971.56 / "Bs8.134.479,10"→8134479.1
@@ -52,24 +55,35 @@ def detectar(df):
     return 'desconocido'
 
 @st.cache_data(ttl=300)
-def cargar_todo(gids):
-    """Carga los GIDs dados y detecta automáticamente cuál es Operaciones y cuál Tesorería"""
-    resultado = {'ops': None, 'teso': None}
+def cargar_todo():
+    """Carga Operaciones (URL sin gid) y Tesorería (gid=158096369)"""
+    ops = None
+    teso = None
     diag = []
-    for gid in gids:
-        try:
-            raw = pd.read_csv(url(gid), dtype=str,
-                              storage_options={'User-Agent': 'Mozilla/5.0'})
-            raw.columns = raw.columns.str.strip()
-            tipo = detectar(raw)
-            diag.append(f"GID {gid}: {len(raw)} filas, detectado='{tipo}', cols={list(raw.columns[:4])}")
-            if tipo == 'ops' and resultado['ops'] is None:
-                resultado['ops'] = procesar_ops(raw)
-            elif tipo == 'teso' and resultado['teso'] is None:
-                resultado['teso'] = procesar_teso(raw)
-        except Exception as e:
-            diag.append(f"GID {gid}: ERROR -> {type(e).__name__}: {str(e)[:120]}")
-    return resultado['ops'], resultado['teso'], diag
+    # Cargar Operaciones - URL sin GID = hoja por defecto
+    try:
+        raw = pd.read_csv(URL_OPS, dtype=str, storage_options={'User-Agent':'Mozilla/5.0'})
+        raw.columns = raw.columns.str.strip()
+        tipo = detectar(raw)
+        diag.append(f"OPS URL: {len(raw)} filas, detectado='{tipo}', cols={list(raw.columns[:4])}")
+        if tipo == 'ops':
+            ops = procesar_ops(raw)
+        else:
+            diag.append(f"WARN: OPS URL devolvió tipo '{tipo}' — se intentará como ops de todas formas")
+            ops = procesar_ops(raw)
+    except Exception as e:
+        diag.append(f"OPS URL ERROR: {type(e).__name__}: {str(e)[:150]}")
+    # Cargar Tesorería - gid confirmado
+    try:
+        raw = pd.read_csv(URL_TESO, dtype=str, storage_options={'User-Agent':'Mozilla/5.0'})
+        raw.columns = raw.columns.str.strip()
+        tipo = detectar(raw)
+        diag.append(f"TESO URL: {len(raw)} filas, detectado='{tipo}', cols={list(raw.columns[:4])}")
+        if tipo == 'teso':
+            teso = procesar_teso(raw)
+    except Exception as e:
+        diag.append(f"TESO URL ERROR: {type(e).__name__}: {str(e)[:150]}")
+    return ops, teso, diag
 
 def procesar_ops(raw):
     m = {}
@@ -118,8 +132,7 @@ def procesar_teso(raw):
 
 # ═══════════════════════ CARGAR ═══════════════════════
 # Probar varios GIDs comunes para encontrar ambas hojas
-GIDS_PROBAR = ["0", "158096369", "1", "2"]
-df_ops, df_teso, diag = cargar_todo(GIDS_PROBAR)
+df_ops, df_teso, diag = cargar_todo()
 
 if df_ops is None or df_ops.empty:
     st.error("⚠️ No se pudieron cargar los datos de Operaciones.")
