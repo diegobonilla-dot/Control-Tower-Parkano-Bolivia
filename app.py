@@ -118,9 +118,8 @@ def procesar_teso(raw):
         elif 'cxc_vencido' in cl: m[c] = 'CxC_Ven'
         elif 'cxp_general' in cl: m[c] = 'CxP_Gen'
         elif 'cxp_mineral' in cl: m[c] = 'CxP_Min'
-        elif 'venta_del_mes' in cl: m[c] = 'Venta_Mes'
     df = raw.rename(columns=m)
-    keep = [v for v in ['Fecha','Bancos','Caja','CxC_Vig','CxC_Ven','CxP_Gen','CxP_Min','Venta_Mes'] if v in df.columns]
+    keep = [v for v in ['Fecha','Bancos','Caja','CxC_Vig','CxC_Ven','CxP_Gen','CxP_Min'] if v in df.columns]
     df = df[keep].copy()
     df['Fecha'] = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce')
     for c in keep:
