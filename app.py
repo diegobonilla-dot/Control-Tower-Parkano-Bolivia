@@ -196,19 +196,32 @@ with c4:
     if st.button("🔄 Refrescar"):
         st.cache_data.clear(); st.rerun()
 
-df_f = df_ops[(df_ops['Fecha']>=pd.to_datetime(f_desde)) & (df_ops['Fecha']<=pd.to_datetime(f_hasta))].copy()
+df_f = df_ops[(df_ops['Fecha'] >= pd.Timestamp(f_desde)) & (df_ops['Fecha'] <= pd.Timestamp(f_hasta))].copy()
 if mes != "Todos": df_f = df_f[df_f['Fecha'].dt.month == mmap[mes]]
 df_f = df_f.reset_index(drop=True)
 if len(df_f)==0:
     st.warning("Sin datos en el rango seleccionado"); st.stop()
 
-s = snap(df_ops, fref_ops, 'Inventario_TMH')
+# Filtrar Tesorería con el mismo rango de fechas
+if df_teso is not None and not df_teso.empty:
+    _mask = (df_teso['Fecha'] >= pd.Timestamp(f_desde)) & (df_teso['Fecha'] <= pd.Timestamp(f_hasta))
+    df_f_teso = df_teso[_mask].copy()
+    if mes != "Todos": df_f_teso = df_f_teso[df_f_teso['Fecha'].dt.month == mmap[mes]]
+    df_f_teso = df_f_teso.reset_index(drop=True)
+else:
+    df_f_teso = None
+
+# Fecha de referencia dinámica = última fecha del rango filtrado
+fref_ops_f  = ultima_con_dato(df_f, 'Inventario_TMH') if len(df_f) > 0 else fref_ops
+fref_teso_f = ultima_con_dato(df_f_teso, 'Bancos') if (df_f_teso is not None and not df_f_teso.empty) else fref_teso
+
+s = snap(df_f, fref_ops_f, 'Inventario_TMH')
 
 t1,t2,t3,t4 = st.tabs(["📊 Operaciones","💰 Tesorería","🔮 Predictivo","📋 Datos"])
 
 # ═══════════════════ TAB 1: OPERACIONES ═══════════════════
 with t1:
-    st.markdown(f"### Indicadores al {fref_ops.strftime('%d/%m/%Y')}")
+    st.markdown(f"### Indicadores al {fref_ops_f.strftime('%d/%m/%Y')}")
     k1,k2,k3,k4,k5,k6 = st.columns(6)
     with k1: st.metric("🗻 Inventario Broza", fmt(s.get('Inventario_TMH'),2,'',' TMH'))
     with k2: st.metric("⛏️ Ley Zn", fmt(s.get('Ley_Zn'),2,'','%'), delta=f"Prom: {df_f['Ley_Zn'].mean():.2f}%")
@@ -266,11 +279,11 @@ with t1:
 
 # ═══════════════════ TAB 2: TESORERÍA ═══════════════════
 with t2:
-    if df_teso is None or df_teso.empty:
-        st.info("No se detectaron datos de Tesorería.")
+    if df_f_teso is None or df_f_teso.empty:
+        st.info("Sin datos de Tesorería en el rango seleccionado.")
     else:
-        st.markdown(f"### Tesorería al {fref_teso.strftime('%d/%m/%Y')}")
-        ts = snap(df_teso, fref_teso, 'Bancos')
+        st.markdown(f"### Tesorería al {fref_teso_f.strftime('%d/%m/%Y')}")
+        ts = snap(df_f_teso, fref_teso_f, 'Bancos')
         bancos = ts.get('Bancos') or 0
         caja   = ts.get('Caja') or 0
         cxc    = ts.get('CxC_Vig') or 0
@@ -287,8 +300,8 @@ with t2:
         st.markdown("---")
         st.markdown("#### 📈 Evolución de Efectivo: Bancos & Caja (Bs)")
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_teso['Fecha'], y=df_teso['Bancos'], name='Bancos', line=dict(color='#3DDC84', width=2.5), fill='tozeroy', fillcolor='rgba(61,220,132,0.08)'))
-        fig.add_trace(go.Scatter(x=df_teso['Fecha'], y=df_teso['Caja'], name='Caja', line=dict(color='#C8A951', width=2)))
+        fig.add_trace(go.Scatter(x=df_f_teso['Fecha'], y=df_f_teso['Bancos'], name='Bancos', line=dict(color='#3DDC84', width=2.5), fill='tozeroy', fillcolor='rgba(61,220,132,0.08)'))
+        fig.add_trace(go.Scatter(x=df_f_teso['Fecha'], y=df_f_teso['Caja'], name='Caja', line=dict(color='#C8A951', width=2)))
         fig.update_layout(**layout(270))
         st.plotly_chart(fig, use_container_width=True)
 
@@ -296,15 +309,15 @@ with t2:
         with c1:
             st.markdown("#### CxC Vigente vs CxP Mineral (Bs)")
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df_teso['Fecha'], y=df_teso['CxC_Vig'], name='CxC Vigente', line=dict(color='#3DDC84', width=2)))
-            fig.add_trace(go.Scatter(x=df_teso['Fecha'], y=df_teso['CxP_Min'], name='CxP Mineral', line=dict(color='#FF4D6D', width=2)))
+            fig.add_trace(go.Scatter(x=df_f_teso['Fecha'], y=df_f_teso['CxC_Vig'], name='CxC Vigente', line=dict(color='#3DDC84', width=2)))
+            fig.add_trace(go.Scatter(x=df_f_teso['Fecha'], y=df_f_teso['CxP_Min'], name='CxP Mineral', line=dict(color='#FF4D6D', width=2)))
             fig.update_layout(**layout(250))
             st.plotly_chart(fig, use_container_width=True)
         with c2:
             st.markdown("#### Capital de Trabajo (CxC − CxP)")
-            serie = df_teso['CxC_Vig'].fillna(0) - df_teso['CxP_Min'].fillna(0)
+            serie = df_f_teso['CxC_Vig'].fillna(0) - df_f_teso['CxP_Min'].fillna(0)
             colores = ['#3DDC84' if v>=0 else '#FF4D6D' for v in serie]
-            fig = go.Figure([go.Bar(x=df_teso['Fecha'], y=serie, marker_color=colores, marker_line_width=0)])
+            fig = go.Figure([go.Bar(x=df_f_teso['Fecha'], y=serie, marker_color=colores, marker_line_width=0)])
             fig.add_hline(y=0, line=dict(color='#8595B0', width=1, dash='dot'))
             fig.update_layout(**layout(250))
             st.plotly_chart(fig, use_container_width=True)
