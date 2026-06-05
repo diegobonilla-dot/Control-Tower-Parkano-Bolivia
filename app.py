@@ -209,7 +209,7 @@ t1,t2,t3,t4 = st.tabs(["📊 Operaciones","💰 Tesorería","🔮 Predictivo","�
 # ═══════════════════ TAB 1: OPERACIONES ═══════════════════
 with t1:
     st.markdown(f"### Indicadores al {fref_ops.strftime('%d/%m/%Y')}")
-    k1,k2,k3,k4,k5 = st.columns(5)
+    k1,k2,k3,k4,k5,k6 = st.columns(6)
     with k1: st.metric("🗻 Inventario Broza", fmt(s.get('Inventario_TMH'),2,'',' TMH'))
     with k2: st.metric("⛏️ Ley Zn", fmt(s.get('Ley_Zn'),2,'','%'), delta=f"Prom: {df_f['Ley_Zn'].mean():.2f}%")
     with k3: st.metric("🥈 Ley Ag", fmt(s.get('Ley_Ag'),2,'','%'), delta=f"Prom: {df_f['Ley_Ag'].mean():.2f}%")
