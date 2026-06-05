@@ -209,7 +209,7 @@ t1,t2,t3,t4 = st.tabs(["📊 Operaciones","💰 Tesorería","🔮 Predictivo","�
 # ═══════════════════ TAB 1: OPERACIONES ═══════════════════
 with t1:
     st.markdown(f"### Indicadores al {fref_ops.strftime('%d/%m/%Y')}")
-    k1,k2,k3,k4,k5,k6 = st.columns(6)
+    k1,k2,k3,k4,k5 = st.columns(5)
     with k1: st.metric("🗻 Inventario Broza", fmt(s.get('Inventario_TMH'),2,'',' TMH'))
     with k2: st.metric("⛏️ Ley Zn", fmt(s.get('Ley_Zn'),2,'','%'), delta=f"Prom: {df_f['Ley_Zn'].mean():.2f}%")
     with k3: st.metric("🥈 Ley Ag", fmt(s.get('Ley_Ag'),2,'','%'), delta=f"Prom: {df_f['Ley_Ag'].mean():.2f}%")
@@ -276,15 +276,13 @@ with t2:
         cxc    = ts.get('CxC_Vig') or 0
         cxp    = ts.get('CxP_Min') or 0
         liq = bancos + caja
-        ct  = cxc - cxp
 
-        k1,k2,k3,k4,k5,k6 = st.columns(6)
+        k1,k2,k3,k4,k5 = st.columns(5)
         with k1: st.metric("🏦 Bancos", fmt(bancos,0,'Bs '))
         with k2: st.metric("💵 Caja", fmt(caja,0,'Bs '))
         with k3: st.metric("💰 Liquidez Total", fmt(liq,0,'Bs '))
         with k4: st.metric("📈 CxC Vigente", fmt(cxc,0,'Bs '))
         with k5: st.metric("📉 CxP Mineral", fmt(cxp,0,'Bs '))
-        with k6: st.metric("⚖️ Cap. Trabajo", fmt(ct,0,'Bs '), delta="Positivo" if ct>=0 else "Déficit", delta_color="normal" if ct>=0 else "inverse")
 
         st.markdown("---")
         st.markdown("#### 📈 Evolución de Efectivo: Bancos & Caja (Bs)")
